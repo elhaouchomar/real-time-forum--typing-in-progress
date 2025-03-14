@@ -27,7 +27,7 @@
   background: var(--Greey);
 }
 
-.chat-header span {
+.chat-header #user-receiver {
   font-size: 1.2rem;
   color: var(--Black);
   font-style: bold;
@@ -119,6 +119,7 @@
 .message-content {
   position: relative;
   margin-right: 30px;
+  padding: 3px;
 }
 .chat-footer {
   align-items: center;
@@ -281,6 +282,22 @@
 .close-message {
   display: none;
 }
+
+.typing {
+  font-style: italic;
+  font-size: 14px;
+  color: var(--BlueGreen);
+  display: block;
+}
+
+.typing.dots::before {
+  content: "Typing";
+}
+
+.typing.dots {
+  display: inline;
+}
+
 
 @media only screen and (max-width: 780px) {
   .chat-box {

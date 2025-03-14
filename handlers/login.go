@@ -54,7 +54,7 @@ func Error(w http.ResponseWriter, r *http.Request) {
 func Logout(w http.ResponseWriter, r *http.Request) {
 	DeleteAllCookie(w, r)
 	JsResponse(w, 200, true, nil)
-	http.Redirect(w, r, "/login", http.StatusFound)
+	// http.Redirect(w, r, "/login", http.StatusFound)
 }
 
 func MiddleWear(w http.ResponseWriter, r *http.Request) (bool, int) {

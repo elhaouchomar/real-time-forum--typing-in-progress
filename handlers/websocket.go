@@ -1,4 +1,3 @@
-// handlers/chat.go
 package handlers
 
 import (
@@ -32,7 +31,6 @@ type UserConnection struct {
 	UserID   int
 }
 
-
 func GetUsers(userID int) ([]string, error) {
 	var users []string
 	rows, err := DB.Query("SELECT username FROM users WHERE id != ?;", userID)
@@ -51,137 +49,145 @@ func GetUsers(userID int) ([]string, error) {
 }
 
 type Message struct {
-    ID        int       `json:"id"`
-    Content   string    `json:"content"`
-    SenderID  int       `json:"sender_id"`
-    ReceiverID int       `json:"receiver_id"`
-    Timestamp time.Time `json:"timestamp"`
-    Type      string    `json:"type"`
-    Username  string    `json:"username"`
-    IsTyping  *bool     `json:"is_typing"`
+	ID         int       `json:"id"`
+	Content    string    `json:"content"`
+	SenderID   int       `json:"sender_id"`
+	ReceiverID int       `json:"receiver_id"`
+	Timestamp  time.Time `json:"timestamp"`
+	Type       string    `json:"type"`
+	Username   string    `json:"username"`
+	IsTyping   *bool     `json:"is_typing"`
 }
 
 func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
-    userID, err := CheckAuthentication(w, r)
-    if err != nil {
-        return
-    }
-    
-    var username string
-    err = DB.QueryRow("SELECT username FROM users WHERE id = ?;", userID).Scan(&username)
-    if err != nil {
-        http.Error(w, "User not found", http.StatusNotFound)
-        return
-    }
-    
-    conn, err := upgrader.Upgrade(w, r, nil)
-    if err != nil {
-        log.Printf("WebSocket upgrade error: %v", err)
-        return
-    }
-    
-    userConn := &UserConnection{
-        Conn:     conn,
-        Username: username,
-        UserID:   userID,
-    }
-    
-    connectedUsers.Lock()
-    connectedUsers.m[userID] = userConn
-    connectedUsers.Unlock()
-    
-    BroadcastUsersList()
-    broadcastStatus(userID, username, true)
-    
-    defer func() {
-        conn.Close()
-        connectedUsers.Lock()
-        delete(connectedUsers.m, userID)
-        connectedUsers.Unlock()
-        broadcastStatus(userID, username, false)
-    }()
-    
+	userID, err := CheckAuthentication(w, r)
+	if err != nil {
+		return
+	}
+
+	var username string
+	err = DB.QueryRow("SELECT username FROM users WHERE id = ?;", userID).Scan(&username)
+	if err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("WebSocket upgrade error: %v", err)
+		return
+	}
+
+	userConn := &UserConnection{
+		Conn:     conn,
+		Username: username,
+		UserID:   userID,
+	}
+
+	connectedUsers.Lock()
+	connectedUsers.m[userID] = userConn
+	connectedUsers.Unlock()
+
 	BroadcastUsersList()
-    for {
-        broadcastStatus(userID, username, false)
-        var msg Message
-        err := conn.ReadJSON(&msg)
-        fmt.Println(msg)
-        if err != nil {
-            if !wsLib.IsCloseError(err, wsLib.CloseGoingAway, wsLib.CloseAbnormalClosure) {
-                log.Printf("WebSocket read error: %v", err)
-            }
-            break
-        }
-        
-        log.Printf("Received message: %+v", msg)
-        
-        if msg.Type == "typing" {
-            if msg.IsTyping == nil {
-                tmpBool := false
-                msg.IsTyping = &tmpBool
-            }
-            
-            log.Printf("Processing typing message: SenderID=%d, ReceiverID=%d, IsTyping=%t", 
-                      msg.SenderID, msg.ReceiverID, *msg.IsTyping)
-            
-            msg.SenderID = userID
-            
-            if msg.ReceiverID != 0  && msg.SenderID != msg.ReceiverID{
-                sendTypingNotification(msg.SenderID, msg.ReceiverID, *msg.IsTyping)
-            } else {
-                log.Printf("Cannot send typing status: invalid receiver ID")
-            }
-            continue
-        }
-        
-        var receiver_id int
-        err = DB.QueryRow("SELECT id FROM users WHERE username = ?;", msg.Username).Scan(&receiver_id)
-        if err != nil || receiver_id == userID {
-            log.Printf("Error getting receiver ID: %v", err)
-            continue
-        }
-        
-        msg.SenderID = userID
-        msg.ReceiverID = receiver_id
-        msg.Timestamp = time.Now()
-        
-        err = saveMessage(msg)
-        if err != nil {
-            log.Printf("Error saving message: %v", err)
-            continue
-        }
-        
-        sendPrivateMessage(msg)
-    }
+	broadcastStatus(userID, username, true)
+
+	defer func() {
+		conn.Close()
+		// connectedUsers.Lock()
+		// delete(connectedUsers.m, userID)
+		// connectedUsers.Unlock()
+		// broadcastStatus(userID, username, false)
+	}()
+
+	for {
+		var msg Message
+		err := conn.ReadJSON(&msg)
+		fmt.Println(msg)
+		if connectedUsers.m[userID].Conn != conn {
+			fmt.Println("+++++++++++++++++++++++")
+			return
+		}
+		if err != nil {
+			if !wsLib.IsCloseError(err, wsLib.CloseGoingAway, wsLib.CloseAbnormalClosure) {
+				log.Printf("WebSocket read error: %v", err)
+			}
+			connectedUsers.Lock()
+			delete(connectedUsers.m, userID)
+			connectedUsers.Unlock()
+			BroadcastUsersList()
+			break
+		}
+
+		log.Printf("Received message: %+v", msg)
+
+		if msg.Type == "typing" {
+			if msg.IsTyping == nil {
+				tmpBool := false
+				msg.IsTyping = &tmpBool
+			}
+
+			log.Printf("Processing typing message: SenderID=%d, ReceiverID=%d, IsTyping=%t",
+				msg.SenderID, msg.ReceiverID, *msg.IsTyping)
+
+			msg.SenderID = userID
+
+			if msg.ReceiverID != 0 && msg.SenderID != msg.ReceiverID {
+				sendTypingNotification(msg.SenderID, msg.ReceiverID, *msg.IsTyping)
+			} else {
+				log.Printf("Cannot send typing status: invalid receiver ID")
+			}
+			continue
+		}
+		var receiver_id int
+		err = DB.QueryRow("SELECT id FROM users WHERE username = ?;", msg.Username).Scan(&receiver_id)
+		if err != nil || receiver_id == userID {
+
+			connectedUsers.Lock()
+			delete(connectedUsers.m, userID)
+			connectedUsers.Unlock()
+			break
+
+		}
+
+		msg.SenderID = userID
+		msg.ReceiverID = receiver_id
+		msg.Timestamp = time.Now()
+
+		err = saveMessage(msg)
+		if err != nil {
+			log.Printf("Error saving message: %v", err)
+			continue
+		}
+
+		sendPrivateMessage(msg)
+	}
 }
 
 func sendTypingNotification(senderID, receiverID int, isTyping bool) {
-    log.Printf("Sending typing notification: Sender=%d, Receiver=%d, Typing=%t", 
-              senderID, receiverID, isTyping)
-    
-    typingStatus := Message{
-        Type:      "typing",
-        SenderID:  senderID,
-        ReceiverID: receiverID,
-        IsTyping:  &isTyping,
-    }
-    
-    connectedUsers.RLock()
-    defer connectedUsers.RUnlock()
-    
-    if receiver, ok := connectedUsers.m[receiverID]; ok {
-        err := receiver.Conn.WriteJSON(typingStatus)
-        if err != nil {
-            log.Printf("Error sending typing status to user %d: %v", receiverID, err)
-        } else {
-            log.Printf("Successfully sent typing status to user %d", receiverID)
-        }
-    } else {
-        log.Printf("Receiver %d not connected", receiverID)
-    }
-}
+	log.Printf("Sending typing notification: Sender=%d, Receiver=%d, Typing=%t",
+		senderID, receiverID, isTyping)
 
+	typingStatus := Message{
+		Type:       "typing",
+		SenderID:   senderID,
+		ReceiverID: receiverID,
+		IsTyping:   &isTyping,
+	}
+
+	connectedUsers.RLock()
+	defer connectedUsers.RUnlock()
+
+	if receiver, ok := connectedUsers.m[receiverID]; ok {
+		err := receiver.Conn.WriteJSON(typingStatus)
+		if err != nil {
+			log.Printf("Error sending typing status to user %d: %v", receiverID, err)
+		} else {
+			log.Printf("Successfully sent typing status to user %d", receiverID)
+		}
+	} else {
+		log.Printf("Receiver %d not connected", receiverID)
+	}
+}
 
 func broadcastMessage(msg Message) {
 	connectedUsers.RLock()

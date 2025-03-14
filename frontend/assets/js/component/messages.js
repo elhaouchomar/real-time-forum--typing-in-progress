@@ -1,5 +1,5 @@
-export function Messages(){
-return `<div id="area-msg" hidden>
+export function Messages() {
+  return `<div id="area-msg" hidden>
             <div class="chat-container">
                 <div class="chat-box">
                     <div class="chat-header">
@@ -10,7 +10,10 @@ return `<div id="area-msg" hidden>
                             <img src="../../assets/images/profile.png" class="profile-img">
                             <div class="status"></div>
                         </div>
+                        <div>
                         <span id="user-receiver"></span>
+                        <span class="typing"></span>
+                        </div>
                     </div>
                     <div id="chat">
                         <div class="messages-area" id="messages"></div>
@@ -34,5 +37,5 @@ return `<div id="area-msg" hidden>
                 </div>
             </div>
         </div>
-`
+`;
 }

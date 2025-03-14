@@ -20,7 +20,6 @@ function fetchUserData() {
     .catch((error) => console.error("Error fetching user data:", error));
 }
 
-// استدعاء الدالة عند تحميل الصفحة
 fetchUserData();
 
 // Chat Vars
@@ -120,7 +119,12 @@ export function connectWebSocket() {
   try {
     ws = new WebSocket("ws://localhost:9090/ws");
 
-    ws.onopen = () => console.log("Connected to chat server");
+    ws.onopen = () => {
+      const logout = document.getElementById("logout")
+      logout.addEventListener("click", () => {
+        ws.close()
+      })
+    }
     ws.onmessage = handleWebSocketMessage;
     ws.onerror = (event) => console.error("WebSocket error:", event);
     ws.onclose = () => {
@@ -132,12 +136,10 @@ export function connectWebSocket() {
     setTimeout(connectWebSocket, 5000);
   }
 }
-// Ensure Message type includes is_typing property
 let lastTypingState = false;
 let typingTimeout;
-const typingDelay = 2000; // 2 seconds
+const typingDelay = 2000;
 
-// Main WebSocket message handler
 function handleWebSocketMessage(event) {
   try {
     const data = JSON.parse(event.data);
@@ -175,31 +177,59 @@ function handleWebSocketMessage(event) {
 }
 
 function updateTypingStatus(senderId, isTyping) {
-  console.log("++++++++++++++++++++++++++++");
-  
   if (senderId === globalUserID) return;
+  
+  const typingElements = document.querySelectorAll(".typing");
+  let check = getActiveChatUserId()
+  
   document.querySelectorAll(".friend").forEach((friend) => {
     const userElement = friend.querySelector(`[id="user-${senderId}"]`);
-
-    if (userElement) {
-      const lastMessageElement = friend.querySelector(".last-message");
-
-      if (lastMessageElement) {
+    const lastMessageElement = friend.querySelector(".last-message");
+    
+    if (userElement && lastMessageElement && check === senderId) {
+      typingElements.forEach((typingElement) => {
         if (isTyping) {
           if (!lastMessageElement.dataset.originalText) {
-            lastMessageElement.dataset.originalText =
-              lastMessageElement.textContent;
+            lastMessageElement.dataset.originalText = lastMessageElement.textContent;
           }
-          lastMessageElement.textContent = "Typing...";
-        } else if (lastMessageElement.dataset.originalText) {
-          lastMessageElement.textContent =
-            lastMessageElement.dataset.originalText;
-          delete lastMessageElement.dataset.originalText;
+          
+          let dots = 0;
+          lastMessageElement.textContent = "Typing";
+          lastMessageElement.style.fontStyle = "italic";
+          lastMessageElement.style.color = "var(--BlueGreen)";
+          lastMessageElement.style.fontSize = "14px";
+          typingElement.style.display = "block";
+          
+          if (!typingElement.typingInterval) {
+            typingElement.typingInterval = setInterval(() => {
+              dots = (dots + 1) % 4;
+              lastMessageElement.textContent = "Typing" + ". ".repeat(dots);
+              typingElement.textContent = "Typing" + ". ".repeat(dots);
+            }, 300);
+          }
+        } else {
+          if (lastMessageElement.dataset.originalText) {
+            lastMessageElement.textContent = lastMessageElement.dataset.originalText;
+            delete lastMessageElement.dataset.originalText;
+          }
+          
+          if (typingElement.typingInterval) {
+            clearInterval(typingElement.typingInterval);
+            delete typingElement.typingInterval;
+          }
+          
+          lastMessageElement.style.fontStyle = "normal";
+          lastMessageElement.style.color = "";
+          lastMessageElement.style.fontSize = "";
+          typingElement.style.display = "none";
+          typingElement.textContent = "";
         }
-      }
+      });
     }
   });
 }
+
+
 
 function handleTypingEvent() {
   clearTimeout(typingTimeout);
@@ -255,6 +285,7 @@ function handleIncomingMessage(data) {
   console.log("omar : ", data);
 
   if (activeUserId === data.sender_id) {
+    markMessagesAsRead(activeUserId)
     const messagesContainer =
       window.messagesArea ||
       document.getElementById("messages") ||
@@ -335,9 +366,8 @@ function createMessageElement(content, time, type, username) {
   const messageDiv = document.createElement("div");
   messageDiv.className = `messages ${type}`;
 
-  // Add a line break if content is more than 30 characters
   const formattedContent =
-    content.length > 30 ? content.replace(/(.{30})/g, "$1<br>") : content;
+    content.length > 20 ? content.replace(/(.{20})/g, "$1<br>") : content;
 
   messageDiv.innerHTML = `
     <div class="message-bubble">
@@ -414,7 +444,7 @@ function addFriend(
             <div>
               <div class="friend-name">${friend}</div>
                 <div class="last-message">${
-                  lastMessage.length > 30
+                  lastMessage.length > 15
                     ? lastMessage.substring(0, 15) + "..."
                     : lastMessage
                 }</div>
@@ -455,7 +485,6 @@ function addFriend(
       //     });
       //   }
       // });
-
       // friendsList.appendChild(friendElement);
     });
   }
